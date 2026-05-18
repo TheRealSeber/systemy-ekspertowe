@@ -8,10 +8,14 @@
 
 :- use_module(kb).
 :- use_module(fuzzy).
-:- dynamic dec_rule/3. % dec_rule(Decision, Attributes, Weight)
+:- dynamic dec_rule/3.          % dec_rule(Decision, Attributes, Weight)
 :- dynamic computed_wielkosc/2. % computed_wielkosc(Animal, Wielkosc)
+:- dynamic consistent_animal/1. % consistent_animal(Animal)
 
-% 1. Setup Phase
+% ============================================================
+% 1. Faza inicjalizacji
+% ============================================================
+
 setup_attributes :-
     retractall(computed_wielkosc(_, _)),
     findall(Animal, animal(Animal), Animals),
@@ -27,87 +31,324 @@ compute_and_store_wielkosc(Animal) :-
 get_attr(Animal, wielkosc, Val) :- computed_wielkosc(Animal, Val), !.
 get_attr(Animal, Attr, Val) :- attribute(Animal, Attr, Val).
 
+% Atrybuty warunkowe A (zgodnie z dokumentem, sekcja 5)
 all_attributes([wielkosc, dieta, srodowisko, skrzydla, nogi, udomowione, rozrod, futro, klimat, gromada, stadne, kontynent]).
 
-% 2. Rough Set: Greedy Reduct Generation
-greedy_reduct(Animal, Reduct) :-
-    findall(Y, (animal(Y), Y \= Animal), Others),
-    all_attributes(Attrs),
-    greedy_reduct_loop(Animal, Others, Attrs, [], RawReduct),
-    minimize_reduct(Animal, Others, RawReduct, Reduct).
+% ============================================================
+% 2. Relacja nierozroznialnosci IND(B) (sekcja 5.1)
+%    IND(B) = {(x,y) in U x U : forall a in B, a(x) = a(y)}
+% ============================================================
 
-greedy_reduct_loop(_, [], _, Acc, Acc) :- !.
-greedy_reduct_loop(Animal, Undiscerned, Attrs, Acc, Reduct) :-
-    find_best_attribute(Animal, Undiscerned, Attrs, BestAttr, DiscernedByBest),
-    ( DiscernedByBest = [] ->
-        % Nierozróżnialne obiekty! Przerywamy i zwracamy to co mamy jako najlepszy możliwy redukt
-        Reduct = Acc
-    ;
-        subtract(Undiscerned, DiscernedByBest, NewUndiscerned),
-        delete(Attrs, BestAttr, RemainingAttrs),
-        greedy_reduct_loop(Animal, NewUndiscerned, RemainingAttrs, [BestAttr|Acc], Reduct)
-    ).
-
-find_best_attribute(Animal, Undiscerned, Attrs, BestAttr, DiscernedList) :-
-    findall(Num-Attr-Discerned, (
-        member(Attr, Attrs),
-        get_attr(Animal, Attr, V1),
-        findall(Y, (member(Y, Undiscerned), get_attr(Y, Attr, V2), V1 \= V2), Discerned),
-        length(Discerned, Num)
-    ), Candidates),
-    sort(1, @>=, Candidates, [BestNum-BestAttr-DiscernedList|_]),
-    ( BestNum > 0 -> true
-    ; BestAttr = none, DiscernedList = [] % Fail gracefully
-    ).
-find_best_attribute(_, _, _, none, []). % Fallback
-
-minimize_reduct(_, _, [], []) :- !.
-minimize_reduct(Animal, Others, [_A|Rest], MinReduct) :-
-    % Check if Rest is enough to discern all Others that CAN be discerned
-    is_reduct(Animal, Others, Rest), !,
-    minimize_reduct(Animal, Others, Rest, MinReduct).
-minimize_reduct(Animal, Others, [A|Rest], [A|MinRest]) :-
-    minimize_reduct(Animal, Others, Rest, MinRest).
-
-is_reduct(_, [], _) :- !.
-is_reduct(Animal, Others, Attrs) :-
-    % Znajdź wszystkie, które MOŻNA odróżnić używając WSZYSTKICH atrybutów
-    all_attributes(AllAttrs),
-    findall(Y, (
-        member(Y, Others),
-        member(A, AllAttrs), get_attr(Animal, A, V1), get_attr(Y, A, V2), V1 \= V2
-    ), DiscernibleOthers),
-    sort(DiscernibleOthers, UniqueDiscernible),
-    % Teraz sprawdź czy Attrs odróżnia te same obiekty
+% indiscernible(+X, +Y, +Attrs)
+% Prawdziwe gdy obiekty X i Y sa nierozroznialne wzgledem atrybutow Attrs
+indiscernible(X, Y, Attrs) :-
     \+ (
-        member(Y, UniqueDiscernible),
-        \+ (member(A, Attrs), get_attr(Animal, A, V1), get_attr(Y, A, V2), V1 \= V2)
+        member(A, Attrs),
+        get_attr(X, A, V1),
+        get_attr(Y, A, V2),
+        V1 \= V2
     ).
 
-core_attributes(Animal, Cores) :-
-    findall(Y, (animal(Y), Y \= Animal), Others),
-    all_attributes(AllAttrs),
+% equivalence_class(+Animal, +Attrs, +Universe, -Class)
+% [x]_B = {y in U : (x,y) in IND(B)}
+equivalence_class(Animal, Attrs, Universe, Class) :-
+    findall(Y, (
+        member(Y, Universe),
+        indiscernible(Animal, Y, Attrs)
+    ), Class).
+
+% all_equivalence_classes(+Universe, +Attrs, -Classes)
+% Wyznacza wszystkie klasy abstrakcji U/IND(B)
+all_equivalence_classes(Universe, Attrs, Classes) :-
+    eq_classes_acc(Universe, Attrs, Universe, [], Classes).
+
+eq_classes_acc([], _, _, Acc, Acc).
+eq_classes_acc([A|Rest], Attrs, Universe, Acc, Classes) :-
+    ( already_classified(A, Acc) ->
+        eq_classes_acc(Rest, Attrs, Universe, Acc, Classes)
+    ;
+        equivalence_class(A, Attrs, Universe, Class),
+        eq_classes_acc(Rest, Attrs, Universe, [Class|Acc], Classes)
+    ).
+
+already_classified(A, Classes) :-
+    member(Class, Classes),
+    member(A, Class), !.
+
+% ============================================================
+% 3. Przyblizenie dolne i gorne (sekcja 5.2)
+%    B(X) = {Y in U/IND(B) : Y subset X}  (dolne)
+%    B_gorne(X) = {Y in U/IND(B) : Y intersect X != empty}  (gorne)
+% ============================================================
+
+% lower_approximation(+TargetSet, +EqClasses, -Lower)
+lower_approximation(TargetSet, EqClasses, Lower) :-
+    findall(Class, (
+        member(Class, EqClasses),
+        subset_list(Class, TargetSet)
+    ), LowerClasses),
+    append(LowerClasses, Lower0),
+    sort(Lower0, Lower).
+
+% upper_approximation(+TargetSet, +EqClasses, -Upper)
+upper_approximation(TargetSet, EqClasses, Upper) :-
+    findall(Class, (
+        member(Class, EqClasses),
+        intersects(Class, TargetSet)
+    ), UpperClasses),
+    append(UpperClasses, Upper0),
+    sort(Upper0, Upper).
+
+subset_list([], _).
+subset_list([H|T], Set) :- member(H, Set), subset_list(T, Set).
+
+intersects(List, Set) :- member(X, List), member(X, Set), !.
+
+% ============================================================
+% 4. Niespojnosc - metoda jakosciowa (sekcja 5.3)
+%    gamma_B(X) = |B(X)| / |U|   (dokladnosc przyblizenia dolnego)
+%    Usuwamy obiekt dla ktorego dokladnosc przyblizenia dolnego
+%    jest mniejsza.
+% ============================================================
+
+remove_inconsistencies :-
+    retractall(consistent_animal(_)),
+    findall(Animal, animal(Animal), Animals),
+    all_attributes(Attrs),
+    remove_inconsistencies_loop(Animals, Attrs).
+
+remove_inconsistencies_loop(Animals, Attrs) :-
+    find_inconsistent_pairs(Animals, Attrs, Conflicts),
+    ( Conflicts = [] ->
+        maplist(assert_consistent, Animals)
+    ;
+        find_worst_object(Animals, Attrs, Conflicts, Worst),
+        delete(Animals, Worst, Remaining),
+        remove_inconsistencies_loop(Remaining, Attrs)
+    ).
+
+% Znajduje pary nierozroznialnych obiektow o roznych decyzjach
+find_inconsistent_pairs(Animals, Attrs, Conflicts) :-
+    findall(X-Y, (
+        member(X, Animals), member(Y, Animals),
+        X @< Y,
+        indiscernible(X, Y, Attrs)
+    ), Conflicts).
+
+% Wybiera obiekt o najnizszej dokladnosci przyblizenia dolnego
+find_worst_object(Animals, Attrs, Conflicts, Worst) :-
+    findall(A, (member(A-_, Conflicts) ; member(_-A, Conflicts)), ConflictAnimals0),
+    sort(ConflictAnimals0, ConflictAnimals),
+    length(Animals, U_size),
+    all_equivalence_classes(Animals, Attrs, EqClasses),
+    findall(Quality-A, (
+        member(A, ConflictAnimals),
+        lower_approximation([A], EqClasses, Lower),
+        length(Lower, LowerSize),
+        Quality is LowerSize / U_size
+    ), Qualities),
+    sort(1, @=<, Qualities, [_-Worst|_]).
+
+assert_consistent(A) :- assertz(consistent_animal(A)).
+
+% ============================================================
+% 5. Macierz nierozroznialnosci (sekcja 5.5.1)
+%    M_ij = {a in A : a(x_i) != a(x_j)}
+% ============================================================
+
+% discernibility_entry(+X, +Y, +Attrs, -Entry)
+discernibility_entry(X, Y, Attrs, Entry) :-
+    findall(A, (
+        member(A, Attrs),
+        get_attr(X, A, V1),
+        get_attr(Y, A, V2),
+        V1 \= V2
+    ), Entry).
+
+% Macierz nierozroznialnosci dla calego zbioru obiektow
+full_discernibility_matrix(Animals, Attrs, Matrix) :-
+    findall(Entry, (
+        member(X, Animals), member(Y, Animals),
+        X @< Y,
+        discernibility_entry(X, Y, Attrs, Entry),
+        Entry \= []
+    ), Matrix).
+
+% Uogolniona macierz nierozroznialnosci wzgledem decyzji (sekcja 5.5.1/5.6)
+% Dla obiektu x_i: wpisy M*_ij tylko dla obiektow x_j z inna decyzja
+decision_discernibility_matrix(Animal, Animals, Attrs, Matrix) :-
+    findall(Entry, (
+        member(Y, Animals),
+        Y \= Animal,
+        discernibility_entry(Animal, Y, Attrs, Entry),
+        Entry \= []
+    ), Matrix).
+
+% ============================================================
+% 6. Atrybuty niezbedne i jadro systemu CORE(B) (sekcja 5.4)
+%    Atrybut a jest zbedny jesli IND(B) = IND(B \ {a})
+%    W przeciwnym razie jest niezbedny.
+%    CORE(B) = zbior wszystkich niezbednych atrybutow
+%    Rownowazne: CORE = suma singletonow macierzy nierozroznialnosci
+% ============================================================
+
+% core_from_matrix(+Matrix, -Core)
+% Core = zbior atrybutow wystepujacych jako jedyne w jakims wpisie macierzy
+core_from_matrix(Matrix, Core) :-
+    findall(A, (
+        member(Entry, Matrix),
+        Entry = [A]
+    ), Core0),
+    sort(Core0, Core).
+
+% core_global(+Animals, +Attrs, -Core)
+core_global(Animals, Attrs, Core) :-
+    full_discernibility_matrix(Animals, Attrs, Matrix),
+    core_from_matrix(Matrix, Core).
+
+% Alternatywna weryfikacja: atrybut a jest niezbedny jesli IND(B) != IND(B\{a})
+core_attributes_verify(Animals, Attrs, Core) :-
     findall(Attr, (
-        member(Attr, AllAttrs),
-        delete(AllAttrs, Attr, AttrsWithoutA),
-        \+ is_reduct(Animal, Others, AttrsWithoutA)
-    ), Cores).
+        member(Attr, Attrs),
+        delete(Attrs, Attr, AttrsWithout),
+        \+ same_indiscernibility(Animals, Attrs, AttrsWithout)
+    ), Core).
+
+same_indiscernibility(Animals, Attrs1, Attrs2) :-
+    \+ (
+        member(X, Animals), member(Y, Animals),
+        X \= Y,
+        ( (indiscernible(X, Y, Attrs1), \+ indiscernible(X, Y, Attrs2))
+        ; (indiscernible(X, Y, Attrs2), \+ indiscernible(X, Y, Attrs1))
+        )
+    ).
+
+% ============================================================
+% 7. Redukty (sekcja 5.5)
+%    Redukt C subset B jest minimalny i posiada niepuste
+%    przeciecie z kazdym niepustym elementem macierzy nierozroznialnosci.
+% ============================================================
+
+% find_reduct(+Matrix, +AllAttrs, -Reduct)
+% Wyznacza redukt metoda zachlanna: zaczynamy od jadra,
+% dodajemy atrybuty pokrywajace najwiecej niepokrytych wpisow
+find_reduct(Matrix, AllAttrs, Reduct) :-
+    core_from_matrix(Matrix, Core),
+    uncovered_entries(Matrix, Core, Uncovered),
+    ( Uncovered = [] ->
+        Reduct = Core
+    ;
+        subtract(AllAttrs, Core, Remaining),
+        greedy_cover(Uncovered, Remaining, Core, Covered),
+        minimize_reduct(Matrix, Covered, Core, Reduct)
+    ).
+
+% uncovered_entries(+Matrix, +Attrs, -Uncovered)
+% Wpisy macierzy niepokryte przez zaden atrybut z Attrs
+uncovered_entries(Matrix, Attrs, Uncovered) :-
+    findall(Entry, (
+        member(Entry, Matrix),
+        \+ (member(A, Entry), member(A, Attrs))
+    ), Uncovered).
+
+% greedy_cover(+Uncovered, +CandidateAttrs, +Acc, -Result)
+% Zachlannie dodaje atrybuty pokrywajace najwiecej niepokrytych wpisow
+greedy_cover([], _, Acc, Acc) :- !.
+greedy_cover(_, [], Acc, Acc) :- !.
+greedy_cover(Uncovered, Candidates, Acc, Result) :-
+    findall(Count-Attr, (
+        member(Attr, Candidates),
+        findall(E, (member(E, Uncovered), member(Attr, E)), CoveredEntries),
+        length(CoveredEntries, Count)
+    ), Scores),
+    sort(1, @>=, Scores, [BestCount-BestAttr|_]),
+    ( BestCount =:= 0 ->
+        Result = Acc
+    ;
+        uncovered_entries(Uncovered, [BestAttr], StillUncovered),
+        delete(Candidates, BestAttr, NewCandidates),
+        greedy_cover(StillUncovered, NewCandidates, [BestAttr|Acc], Result)
+    ).
+
+% minimize_reduct(+Matrix, +Reduct, +Core, -MinReduct)
+% Probuje usunac kazdy atrybut spoza jadra - jesli redukt nadal pokrywa
+% cala macierz, to atrybut jest zbedny
+minimize_reduct(Matrix, Reduct, Core, MinReduct) :-
+    subtract(Reduct, Core, NonCore),
+    try_remove(Matrix, Reduct, NonCore, MinReduct).
+
+try_remove(_, Current, [], Current) :- !.
+try_remove(Matrix, Current, [A|Rest], MinReduct) :-
+    delete(Current, A, Without),
+    ( covers_all_entries(Matrix, Without) ->
+        try_remove(Matrix, Without, Rest, MinReduct)
+    ;
+        try_remove(Matrix, Current, Rest, MinReduct)
+    ).
+
+% covers_all_entries(+Matrix, +Attrs)
+% Sprawdza czy Attrs pokrywa kazdy niepusty wpis macierzy
+covers_all_entries(Matrix, Attrs) :-
+    \+ (
+        member(Entry, Matrix),
+        Entry \= [],
+        \+ (member(A, Entry), member(A, Attrs))
+    ).
+
+% ============================================================
+% 8. Reguly minimalne - algorytm Pawlaka i Skowrona (sekcja 5.6)
+%    a1(x)=v1 ^ a2(x)=v2 ^ ... ^ ak(x)=vk => dec(x)=d
+%
+%    1. Usuwamy niespojnosci z tablicy decyzyjnej DT (metoda jakosciowa)
+%    2. Tworzymy macierz nierozroznialnosci
+%    3. Dla kazdej wartosci atrybutu decyzyjnego d in V_d:
+%       - Tworzymy uogolniona macierz nierozroznialnosci wzgledem decyzji
+%       - Wyznaczamy funkcje nierozroznialnosci i minimalizujemy ja
+%       - Zapisujemy regule decyzyjna
+% ============================================================
 
 generate_reducts_and_rules :-
     setup_attributes,
     retractall(dec_rule(_, _, _)),
-    findall(Animal, animal(Animal), Animals),
-    maplist(process_animal_rules, Animals).
+    retractall(consistent_animal(_)),
+    % Krok 1: Usuwanie niespojnosci metoda jakosciowa
+    remove_inconsistencies,
+    findall(Animal, consistent_animal(Animal), Animals),
+    all_attributes(Attrs),
+    % Krok 2-3: Dla kazdego obiektu generujemy reguly
+    maplist(generate_rules_for_animal(Animals, Attrs), Animals).
+
+generate_rules_for_animal(Animals, Attrs, Animal) :-
+    % Krok 3a: Uogolniona macierz nierozroznialnosci wzgledem decyzji
+    decision_discernibility_matrix(Animal, Animals, Attrs, Matrix),
+    ( Matrix = [] ->
+        true
+    ;
+        % Krok 3b: Wyznaczanie i minimalizacja funkcji nierozroznialnosci (redukt)
+        find_reduct(Matrix, Attrs, Reduct),
+        % Krok 3c: Zapis reguly decyzyjnej
+        create_rule(Animal, Reduct)
+    ).
 
 process_animal_rules(Animal) :-
-    greedy_reduct(Animal, Reduct),
-    create_rule(Animal, Reduct).
+    findall(A, consistent_animal(A), Animals),
+    all_attributes(Attrs),
+    decision_discernibility_matrix(Animal, Animals, Attrs, Matrix),
+    ( Matrix = [] -> true
+    ; find_reduct(Matrix, Attrs, Reduct),
+      create_rule(Animal, Reduct)
+    ).
 
 create_rule(Animal, Reduct) :-
     findall(Attr=Val, (member(Attr, Reduct), get_attr(Animal, Attr, Val)), RuleAttrs),
-    ( dec_rule(Animal, RuleAttrs, _) -> true
-    ; assertz(dec_rule(Animal, RuleAttrs, 1))
+    sort(RuleAttrs, SortedAttrs),
+    ( dec_rule(Animal, SortedAttrs, _) -> true
+    ; assertz(dec_rule(Animal, SortedAttrs, 1))
     ).
+
+% ============================================================
+% 9. Klasyfikacja - dopasowanie regul
+% ============================================================
 
 get_decision(UserAttrs, PredictedDecision) :-
     findall(Decision, (
@@ -127,22 +368,44 @@ count_occurrences(_, [], 0).
 count_occurrences(X, [X|T], N) :- count_occurrences(X, T, N1), N is N1 + 1, !.
 count_occurrences(X, [_|T], N) :- count_occurrences(X, T, N).
 
+% ============================================================
+% 10. Funkcje analizy bazy wiedzy
+% ============================================================
+
+% Wyswietla atrybuty niezbedne (jadro systemu CORE(B))
 print_indispensable :-
     setup_attributes,
-    findall(Animal, animal(Animal), Animals),
-    findall(Cores, (member(Animal, Animals), core_attributes(Animal, Cores), Cores \= []), IndList),
-    flatten(IndList, FlatInd),
-    sort(FlatInd, SortedInd),
-    write('Atrybuty niezbedne (Core) w calym systemie: '), writeln(SortedInd).
+    retractall(consistent_animal(_)),
+    remove_inconsistencies,
+    findall(Animal, consistent_animal(Animal), Animals),
+    all_attributes(Attrs),
+    core_global(Animals, Attrs, Core),
+    write('Atrybuty niezbedne (Core) w calym systemie: '), writeln(Core),
+    % Weryfikacja alternatywna metoda
+    core_attributes_verify(Animals, Attrs, CoreVerify),
+    write('Weryfikacja (metoda IND): '), writeln(CoreVerify).
 
+% Generuje i wyswietla reguly minimalne
 find_minimal_rules :-
     generate_reducts_and_rules,
-    findall(RuleAttrs, dec_rule(_, RuleAttrs, _), AllRules),
-    sort(AllRules, UniqueRules),
+    findall(dec_rule(D, R, W), dec_rule(D, R, W), AllRules),
+    length(AllRules, L),
     write('Reguly minimalne wygenerowane pomyslnie.'), nl,
-    length(UniqueRules, L),
-    write('Liczba unikalnych regul: '), writeln(L),
+    write('Liczba regul: '), writeln(L),
     write('Przykladowe reguly:'), nl,
     ( AllRules = [R1, R2, R3 | _] ->
-        writeln(R1), writeln(R2), writeln(R3)
-    ; true ).
+        print_rule(R1), print_rule(R2), print_rule(R3)
+    ; maplist(print_rule, AllRules)
+    ).
+
+print_rule(dec_rule(Decision, Attrs, _Weight)) :-
+    write('  '),
+    print_conditions(Attrs),
+    write(' => '), writeln(Decision).
+
+print_conditions([]) :- !.
+print_conditions([A=V]) :- !,
+    write(A), write('='), write(V).
+print_conditions([A=V|Rest]) :-
+    write(A), write('='), write(V), write(' ^ '),
+    print_conditions(Rest).
