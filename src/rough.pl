@@ -6,8 +6,9 @@
     process_animal_rules/1, get_attr/3, all_attributes/1
 ]).
 
-:- use_module(kb).
-:- use_module(fuzzy).
+:- use_module(library(lists)).
+:- use_module('kb').
+:- use_module('fuzzy').
 :- dynamic dec_rule/3.          % dec_rule(Decision, Attributes, Weight)
 :- dynamic computed_wielkosc/2. % computed_wielkosc(Animal, Wielkosc)
 :- dynamic consistent_animal/1. % consistent_animal(Animal)

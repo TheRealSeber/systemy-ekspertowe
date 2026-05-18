@@ -2,9 +2,9 @@
     start_expert_system/0
 ]).
 
-:- use_module(kb).
-:- use_module(rough).
-:- use_module(fuzzy).
+:- use_module('kb').
+:- use_module('rough').
+:- use_module('fuzzy').
 
 :- dynamic known/3. % known(Attr, Op, Val) e.g. known(skrzydla, =, tak)
 

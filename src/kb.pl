@@ -1,3 +1,13 @@
+:- module(kb, [
+    animal/1,
+    attribute/3,
+    continuous_attribute/3
+]).
+
+:- discontiguous animal/1.
+:- discontiguous attribute/3.
+:- discontiguous continuous_attribute/3.
+
 % Baza wiedzy (100 gatunków)
 
 animal('lew').
