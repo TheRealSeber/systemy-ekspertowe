@@ -1,4 +1,4 @@
-import random
+import csv
 
 animals = [
     "lew", "tygrys", "niedzwiedz", "wilk", "lis", "slon", "zyrafa", "zebra", "hipopotam", "nosorozec",
@@ -13,77 +13,19 @@ animals = [
     "pszczola", "mucha", "komar", "motyl", "cma", "zapasnik", "biedronka", "stonka", "pajak", "skorpion"
 ]
 
-# Ensure we have exactly 100
-animals = animals[:100]
+animals = {}
 
-diety = ["roslinozerne", "wszystkozerne", "miesozerne"]
-srodowiska = ["ladowe", "wodne", "powietrzne"]
-skrzydla_opts = ["tak", "nie"]
-nogi = ["dwa", "cztery", "szesc", "osiem", "wiecej", "brak"]
-udomowione_opts = ["tak", "nie"]
-rozrod = ["zyworodne", "jajorodne", "jajozyworodne"]
-futro_opts = ["tak", "nie"]
-klimaty = ["chlodny", "umiarkowany", "cieply"]
-gromady = ["plazy", "gady", "ryby", "ptaki", "ssaki", "inne"]
-stadne_opts = ["tak", "nie"]
-kontynenty = ["azja", "afryka", "ameryka_polnocna", "ameryka_poludniowa", "europa", "antarktyda", "australia"]
+with open('zwierzeta_atrybuty.csv', mode='r', encoding='utf-8') as file:
+    reader = csv.DictReader(file)
+    for row in reader:
+        # Pobieramy nazwę zwierzęcia jako klucz główny
+        nazwa_zwierzecia = row.pop('Zwierze') 
+        # Reszta kolumn staje się wartością (podwójnym słownikiem)
+        animals[nazwa_zwierzecia] = row
+        animals[nazwa_zwierzecia]['name'] = nazwa_zwierzecia
 
 def gen_animal_data(name):
-    # Determine basic logic
-    gromada = random.choice(gromady)
-    
-    skrzydla = "nie"
-    if gromada == "ptaki":
-        skrzydla = "tak"
-    elif name in ["nietoperz", "pszczola", "mucha", "komar", "motyl", "cma", "biedronka"]:
-        skrzydla = "tak"
-        
-    f = "nie"
-    if gromada == "ssaki":
-        f = "tak"
-        
-    srod = random.choice(srodowiska)
-    if gromada == "ryby":
-        srod = "wodne"
-    if skrzydla == "tak" and gromada == "ptaki":
-        srod = "powietrzne"
-        
-    n = "cztery"
-    if gromada == "ptaki" or name in ["czlowiek", "kangur", "strus", "emu", "kiwi"]:
-        n = "dwa"
-    elif gromada == "ryby" or name in ["waz_boa", "kobra", "zmija"]:
-        n = "brak"
-    elif name in ["pszczola", "mucha", "komar", "motyl", "cma", "zapasnik", "biedronka", "stonka"]:
-        n = "szesc"
-    elif name in ["pajak", "skorpion"]:
-        n = "osiem"
-        
-    rozr = "jajorodne"
-    if gromada == "ssaki" and name not in ["dziobak", "kolczatka"]:
-        rozr = "zyworodne"
-    
-    # fuzzy parameters
-    ciezar = random.uniform(0.1, 1500)
-    dlugosc = random.uniform(5, 700)
-    zycie = random.uniform(1, 40)
-        
-    return {
-        "name": name,
-        "dieta": random.choice(diety),
-        "srodowisko": srod,
-        "skrzydla": skrzydla,
-        "nogi": n,
-        "udomowione": random.choice(udomowione_opts),
-        "rozrod": rozr,
-        "futro": f,
-        "klimat": random.choice(klimaty),
-        "gromada": gromada,
-        "stadne": random.choice(stadne_opts),
-        "kontynent": random.choice(kontynenty),
-        "ciezar": round(ciezar, 2),
-        "dlugosc": round(dlugosc, 2),
-        "zycie": round(zycie, 2)
-    }
+    return animals[name]
 
 prolog_code = "% Baza wiedzy (100 gatunków)\n\n"
 
