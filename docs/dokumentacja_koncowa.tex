@@ -1,0 +1,996 @@
+% !TeX program = pdflatex
+% Dokumentacja koncowa projektu - System Ekspertowy do Identyfikacji Gatunkow Zwierzat
+% Styl zgodny z dokumentem "system_ekspertowy_gatunki_zwierzat.pdf" (Opis Projektu).
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[polish]{babel}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage{pgfgantt}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=blue,
+    citecolor=black
+}
+
+% ----- Naglowek i stopka -----
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\lhead{\small System Ekspertowy -- Identyfikacja Zwierząt}
+\rhead{\small Gryboś, Piechota, Rydz, Sobociński}
+\cfoot{\small Strona \thepage{} z \pageref{LastPage}}
+
+% ----- Styl listingow kodu (Prolog / Python) -----
+\definecolor{codegray}{gray}{0.95}
+\definecolor{codecomment}{rgb}{0.30,0.55,0.30}
+\definecolor{codekeyword}{rgb}{0.10,0.10,0.65}
+
+\lstdefinelanguage{Prolog}{
+    morekeywords={is,findall,member,assertz,retractall,sort,length,maplist,
+        append,delete,subtract,dynamic,module,use_module,write,writeln,nl,
+        format,not,true,fail},
+    sensitive=true,
+    morecomment=[l]{\%},
+    morestring=[b]',
+}
+
+\lstset{
+    backgroundcolor=\color{codegray},
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{codekeyword}\bfseries,
+    commentstyle=\color{codecomment}\itshape,
+    stringstyle=\color{black},
+    breaklines=true,
+    showstringspaces=false,
+    frame=single,
+    framesep=4pt,
+    xleftmargin=6pt,
+    xrightmargin=2pt,
+    columns=fullflexible,
+    extendedchars=true,
+    inputencoding=utf8,
+    literate=%
+        {ą}{{\k a}}1 {ć}{{\'c}}1 {ę}{{\k e}}1 {ł}{{\l}}1 {ń}{{\'n}}1
+        {ó}{{\'o}}1 {ś}{{\'s}}1 {ż}{{\.z}}1 {ź}{{\'z}}1
+        {Ą}{{\k A}}1 {Ć}{{\'C}}1 {Ę}{{\k E}}1 {Ł}{{\L}}1 {Ń}{{\'N}}1
+        {Ó}{{\'O}}1 {Ś}{{\'S}}1 {Ż}{{\.Z}}1 {Ź}{{\'Z}}1
+}
+
+\newcommand{\code}[1]{\texttt{#1}}
+
+\begin{document}
+
+% ============================================================
+%  STRONA TYTULOWA
+% ============================================================
+\begin{titlepage}
+\centering
+\vspace*{1cm}
+
+\includegraphics[width=0.5\textwidth]{pw_logo.png}\\[1.5cm]
+
+{\Large\bfseries Politechnika Warszawska}\\[0.3cm]
+{\large Wydział Matematyki i Nauk Informacyjnych}\\[1.8cm]
+
+\rule{\linewidth}{0.5mm}\\[0.6cm]
+{\huge\bfseries System Ekspertowy\\[0.3cm] do Identyfikacji Gatunków Zwierząt}\\[0.5cm]
+{\Large Dokumentacja Końcowa}\\[0.4cm]
+\rule{\linewidth}{0.5mm}\\[1.8cm]
+
+{\large\bfseries Autorzy:}\\[0.4cm]
+{\large
+Krzysztof Gryboś\\
+Michał Piechota\\
+Sebastian Rydz\\
+Hubert Sobociński}
+
+\vfill
+{\large Przedmiot: Systemy Ekspertowe}\\[0.2cm]
+{\large Rok akademicki 2025/2026}\\[1cm]
+{\large Warszawa, 2026}
+
+\end{titlepage}
+
+% ============================================================
+%  SPIS TRESCI
+% ============================================================
+\newpage
+\tableofcontents
+\thispagestyle{fancy}
+\newpage
+
+% ============================================================
+\section{Wprowadzenie i Cel Projektu}
+% ============================================================
+Niniejszy dokument stanowi dokumentację końcową projektu zrealizowanego w ramach
+przedmiotu \textit{Systemy Ekspertowe}. Opisuje on gotowy, działający system
+ekspertowy, którego zadaniem jest identyfikacja gatunku zwierzęcia na podstawie
+jego cech fenotypowych (takich jak masa ciała, długość, długość życia, pokrycie
+ciała) oraz środowiskowych (np. środowisko życia, kontynent występowania).
+
+W odróżnieniu od prostych algorytmów decyzyjnych opartych na drzewach
+decyzyjnych, zaimplementowany system wykorzystuje \textbf{wnioskowanie
+dedukcyjne w środowisku niepewnym}. Łączy on ścisłą logikę języka Prolog
+z mechanizmami logiki rozmytej (ang. \textit{fuzzy logic}) oraz teorią zbiorów
+przybliżonych (ang. \textit{rough sets}), co pozwala na obsługę parametrów
+o charakterze ciągłym i prowadzenie wnioskowania przybliżonego.
+
+Całość systemu została zaimplementowana w języku \textbf{SWI-Prolog}.
+Pomocniczy skrypt w języku Python posłużył do wygenerowania bazy wiedzy
+z pliku danych w formacie CSV.
+
+\subsection{Zakres funkcjonalny}
+Zaimplementowany system umożliwia:
+\begin{itemize}[noitemsep]
+    \item klasyfikację zwierząt na podstawie cech podawanych interaktywnie przez
+          użytkownika,
+    \item wnioskowanie z niepewnością przy użyciu funkcji przynależności zbiorów
+          rozmytych,
+    \item dynamiczne sterowanie dialogiem w oparciu o moc dyskryminacyjną
+          atrybutów (mierzoną entropią),
+    \item analizę bazy wiedzy pod kątem reguł minimalnych, atrybutów niezbędnych
+          (jądra) oraz reduktów.
+\end{itemize}
+
+\subsection{Struktura projektu}
+Projekt został podzielony na pliki odpowiadające poszczególnym warstwom systemu.
+Strukturę plików przedstawiono w tabeli~\ref{tab:files}.
+
+\begin{table}[h]
+\centering
+\caption{Struktura plików projektu}
+\label{tab:files}
+\begin{tabularx}{\linewidth}{l X}
+\toprule
+\textbf{Plik} & \textbf{Opis} \\
+\midrule
+\code{main.pl}              & Punkt wejścia. Menu wyboru: uruchomienie systemu lub analiza bazy wiedzy. \\
+\code{src/kb.pl}            & Baza wiedzy -- fakty o 100 gatunkach (atrybuty dyskretne i ciągłe). \\
+\code{src/fuzzy.pl}         & Moduł wnioskowania rozmytego (funkcje przynależności, t-norma, wyznaczanie atrybutu \textit{wielkość}). \\
+\code{src/rough.pl}         & Moduł wnioskowania przybliżonego (relacja nierozróżnialności, redukty, reguły minimalne, klasyfikacja). \\
+\code{src/ui.pl}            & Interfejs użytkownika -- dynamiczny dialog i selekcja pytań. \\
+\code{gen\_kb.py}           & Skrypt generujący \code{kb.pl} z pliku \code{zwierzeta\_atrybuty.csv}. \\
+\code{zwierzeta\_atrybuty.csv} & Dane źródłowe: 100 gatunków wraz z wartościami atrybutów. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ============================================================
+\section{Modelowanie Wiedzy}
+% ============================================================
+Baza wiedzy nie jest prostym wykazem gatunków, lecz zbiorem faktów oddzielających
+wiedzę o dziedzinie od logiki sterującej. Każde zwierzę opisane jest zestawem
+atrybutów dyskretnych (deklarowanych predykatem \code{attribute/3}) oraz ciągłych
+(predykat \code{continuous\_attribute/3}).
+
+\subsection{Reprezentacja atrybutów rozmytych}
+Jednym z kluczowych wyzwań jest obsługa parametrów rozmytych, takich jak masa
+lub długość ciała. Zamiast stosować sztywne progi binarne przynależności (np.
+\code{masa > 100 kg}), system wykorzystuje teorię zbiorów rozmytych. Zdefiniowane
+są funkcje przynależności $\mu_A(x)$, co umożliwia przypisanie cechy do obiektu
+z częściową pewnością.
+
+\subsubsection{Typy funkcji przynależności}
+\paragraph{Funkcja trapezoidalna}
+Stosowana dla atrybutów posiadających przedział pełnej przynależności i częściową
+przynależność na obu jego końcach. Oznaczamy ją jako $\mathrm{Trapez}(a,b,c,d)$.
+\begin{equation}
+\mu_T(x;a,b,c,d)=
+\begin{cases}
+0 & x \le a\\[2pt]
+\dfrac{x-a}{b-a} & a < x \le b\\[6pt]
+1 & b < x \le c\\[2pt]
+\dfrac{d-x}{d-c} & c < x \le d\\[6pt]
+0 & d < x
+\end{cases}
+\end{equation}
+
+\paragraph{Funkcje L i R-kształtne}
+Stosowane dla atrybutów, które dla wartości mniejszych (większych) od wartości
+granicznej mają pełną przynależność, a na krańcu przynależność częściową.
+Oznaczamy je jako $\mathrm{L\text{-}kszta\l tna}(a,b)$ oraz
+$\mathrm{R\text{-}kszta\l tna}(a,b)$.
+\begin{equation}
+\mu_L(x;a,b)=
+\begin{cases}
+1 & x \le a\\[2pt]
+\dfrac{b-x}{b-a} & a < x \le b\\[6pt]
+0 & b < x
+\end{cases}
+\qquad
+\mu_R(x;a,b)=
+\begin{cases}
+0 & x \le a\\[2pt]
+\dfrac{x-a}{b-a} & a < x \le b\\[6pt]
+1 & b < x
+\end{cases}
+\end{equation}
+
+W implementacji funkcje te zostały zrealizowane bezpośrednio w pliku
+\code{fuzzy.pl}:
+
+\begin{lstlisting}[language=Prolog,caption={Funkcje przynależności (\code{fuzzy.pl})}]
+trapez(X, A, B, C, D, Val) :-
+    ( X =< A -> Val = 0.0
+    ; X > A, X =< B -> Val is (X - A) / (B - A)
+    ; X > B, X =< C -> Val = 1.0
+    ; X > C, X =< D -> Val is (D - X) / (D - C)
+    ; Val = 0.0
+    ).
+
+l_ksztaltna(X, A, B, Val) :-
+    ( X =< A -> Val = 1.0
+    ; X > A, X =< B -> Val is (B - X) / (B - A)
+    ; Val = 0.0
+    ).
+
+r_ksztaltna(X, A, B, Val) :-
+    ( X =< A -> Val = 0.0
+    ; X > A, X =< B -> Val is (X - A) / (B - A)
+    ; Val = 1.0
+    ).
+\end{lstlisting}
+
+\subsubsection{Atrybuty rozmyte w systemie}
+W tabeli~\ref{tab:fuzzy} przedstawiono wszystkie atrybuty rozmyte wraz
+z przypisanymi funkcjami przynależności (zgodnie z definicjami w \code{fuzzy.pl}).
+
+\begin{table}[h]
+\centering
+\caption{Wykaz atrybutów rozmytych używanych w systemie}
+\label{tab:fuzzy}
+\begin{tabularx}{\linewidth}{l l l X}
+\toprule
+\textbf{Atrybut} & \textbf{Wartość} & \textbf{Funkcja przynależności} & \textbf{Opis} \\
+\midrule
+\multirow{5}{*}{Ciężar}
+ & bardzo lekki  & L-kształtna(0.5, 1)        & \multirow{5}{=}{Orientacyjna waga zwierzęcia w kg.} \\
+ & lekki         & Trapez(0.5, 5, 15, 25)     & \\
+ & średni        & Trapez(15, 20, 50, 100)    & \\
+ & ciężki        & Trapez(50, 100, 400, 500)  & \\
+ & bardzo ciężki & R-kształtna(500, 1000)     & \\
+\midrule
+\multirow{5}{*}{Długość}
+ & bardzo mały  & L-kształtna(10, 20)        & \multirow{5}{=}{Orientacyjna długość ciała w cm.} \\
+ & mały         & Trapez(10, 15, 35, 50)     & \\
+ & średni       & Trapez(20, 30, 50, 120)    & \\
+ & duży         & Trapez(80, 200, 400, 500)  & \\
+ & bardzo duży  & R-kształtna(400, 600)      & \\
+\midrule
+\multirow{3}{*}{Długość życia}
+ & krótka  & L-kształtna(5, 15)       & \multirow{3}{=}{Typowa długość życia w latach.} \\
+ & średnia & Trapez(10, 15, 20, 30)   & \\
+ & długa   & R-kształtna(20, 30)      & \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Na podstawie tych atrybutów generowany jest zbiorczy atrybut \textbf{Wielkość},
+wykorzystywany następnie w module wnioskowania przybliżonego. Atrybut ten
+przyjmuje wartości: \textit{bardzo mała, mała, średnia, duża, bardzo duża}
+oraz \textit{niestandardowa}.
+
+\subsection{Pozostałe atrybuty}
+Wiele cech charakteryzujących zwierzęta ma charakter kategoryczny -- przypisuje
+się im jedną konkretną wartość. Dla tych cech stosujemy atrybuty nierozmyte.
+Ich wykaz znajduje się w tabeli~\ref{tab:discrete}.
+
+\begin{table}[h]
+\centering
+\caption{Wykaz atrybutów dyskretnych używanych w systemie}
+\label{tab:discrete}
+\small
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\linewidth}{%
+    >{\raggedright\arraybackslash}p{2.9cm}%
+    >{\raggedright\arraybackslash\hsize=1.25\hsize}X%
+    >{\raggedright\arraybackslash\hsize=0.75\hsize}X}
+\toprule
+\textbf{Atrybut} & \textbf{Wartości} & \textbf{Opis} \\
+\midrule
+Dieta               & roślinożerne, wszystkożerne, mięsożerne  & Główny rodzaj spożywanego pokarmu. \\
+Środowisko życia    & lądowe, wodne, powietrzne                & Środowisko typowe dla gatunku. \\
+Skrzydła?           & tak, nie                                 & Czy zwierzę posiada skrzydła. \\
+Liczba nóg/odnóży   & dwa, cztery, sześć, osiem, więcej, brak  & Liczba nóg lub odnóży. \\
+Udomowione?         & tak, nie                                 & Czy zwierzę jest udomowione. \\
+Strategia rozrodcza & żyworodne, jajorodne, jajożyworodne      & Sposób wydawania potomstwa. \\
+Futro?              & tak, nie                                 & Czy zwierzę posiada futro. \\
+Typ klimatu         & chłodny, umiarkowany, ciepły             & Typ klimatu występowania. \\
+Gromada             & płazy, gady, ryby, ptaki, ssaki, inne    & Przynależność do gromady. \\
+Stadne?             & tak, nie                                 & Czy zwierzę ma instynkt stadny. \\
+Kontynent           & Azja, Afryka, Ameryka Płn., Ameryka Płd., Europa, Antarktyda, Australia & Kontynent występowania. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Implementacja bazy wiedzy}
+Baza wiedzy zawiera \textbf{100 gatunków} zwierząt. Aby uniknąć ręcznego
+wpisywania faktów, dane przygotowano w pliku \code{zwierzeta\_atrybuty.csv},
+a plik \code{kb.pl} generowany jest automatycznie skryptem \code{gen\_kb.py}.
+Przykładowy fragment wygenerowanej bazy:
+
+\begin{lstlisting}[language=Prolog,caption={Fragment bazy wiedzy (\code{kb.pl})}]
+animal('lew').
+attribute('lew', dieta, 'miesozerne').
+attribute('lew', srodowisko, 'ladowe').
+attribute('lew', skrzydla, 'nie').
+attribute('lew', nogi, 'cztery').
+attribute('lew', gromada, 'ssaki').
+attribute('lew', kontynent, 'afryka').
+% ... pozostale atrybuty dyskretne ...
+continuous_attribute('lew', ciezar, 190.0).
+continuous_attribute('lew', dlugosc, 250.0).
+continuous_attribute('lew', dlugosc_zycia, 12.0).
+\end{lstlisting}
+
+Baza udostępnia tylko fakty -- nie zawiera żadnej logiki sterującej ani statycznie
+zapisanych konkluzji, co realizuje wymóg separacji warstw (rozdział~\ref{sec:arch}).
+
+% ============================================================
+\section{Mechanizm Wnioskowania i Interakcja z Użytkownikiem}
+% ============================================================
+System nie realizuje z góry ustalonej, statycznej sekwencji pytań. Przebieg
+dialogu jest dynamicznym wynikiem procesu poszukiwania rozwiązania. Logika
+dialogu zaimplementowana jest w pliku \code{ui.pl}, a sterowana jest pętlą
+\code{ask\_loop/2}, która utrzymuje aktualny zbiór możliwych hipotez
+(\textit{PossibleAnimals}) oraz zbiór jeszcze niewykorzystanych atrybutów.
+
+\subsection{Dynamiczna selekcja pytań}
+Interfejs na bieżąco analizuje aktualną przestrzeń hipotez i wybiera do zadania
+pytanie o atrybut o \textbf{najwyższej mocy dyskryminacyjnej}. Moc ta jest
+mierzona za pomocą \textbf{entropii} rozkładu wartości atrybutu wśród
+rozważanych zwierząt -- wybierany jest atrybut o najniższej entropii warunkowej,
+czyli ten, który najsilniej zawęża zbiór hipotez. Atrybuty o jednej wartości
+(bezużyteczne dla rozróżnienia) są pomijane.
+
+\begin{equation}
+H(a) = -\sum_{v \in V_a} p(v)\,\log p(v)
+\end{equation}
+
+\begin{lstlisting}[language=Prolog,caption={Selekcja atrybutu na podstawie entropii (\code{ui.pl})}]
+best_attribute_to_ask(Attrs, Animals, BestAttr) :-
+    findall(Score-Attr, (
+        member(Attr, Attrs),
+        evaluate_attribute(Attr, Animals, Score)
+    ), Scores),
+    ( Scores = [] -> BestAttr = none
+    ; sort(1, @=<, Scores, [MinScore-BestAttr|_]), % minimalizujemy entropie
+      MinScore < 999 -> true
+    ; BestAttr = none
+    ).
+\end{lstlisting}
+
+\subsection{Kontekstowość dialogu}
+Zgromadzone dotychczas informacje są zawsze uwzględniane przy wyborze kolejnego
+pytania -- po każdej odpowiedzi zbiór hipotez jest filtrowany
+(\code{filter\_animals/4}), a kolejne pytanie dobierane jest już do nowej,
+zawężonej przestrzeni. Dzięki temu pytania o atrybuty, które straciły moc
+rozróżniającą, nie są zadawane.
+
+\subsection{Wielokrotny wybór}
+System dopuszcza odpowiedzi wielokrotnego wyboru wszędzie tam, gdzie wynika to
+z natury pytania. Użytkownik może podać kilka wartości oddzielonych przecinkami
+(np. \code{tak,nie}); są one wówczas obsługiwane przez
+\code{filter\_animals\_multi/4}, który zachowuje zwierzęta pasujące do
+\textit{którejkolwiek} ze wskazanych wartości.
+
+% ============================================================
+\section{Moduł wnioskowania rozmytego}
+% ============================================================
+Pierwszym etapem pracy systemu jest wnioskowanie rozmyte. Moduł operuje na
+zbiorach rozmytych stworzonych na podstawie atrybutów \textit{ciężar},
+\textit{długość} i \textit{długość życia}. Na ich podstawie tworzy nowy,
+zbiorczy atrybut \textit{wielkość}. Wnioskowanie oparte jest na iloczynowej
+t-normie.
+
+Proces składa się z trzech etapów:
+\begin{enumerate}
+    \item \textbf{Rozmywanie} -- wartość liczbowa konwertowana jest na stopnie
+          przynależności do zbiorów rozmytych za pomocą funkcji z tabeli~\ref{tab:fuzzy}.
+    \item \textbf{Wnioskowanie} -- reguły rozmyte łączą przynależności
+          poszczególnych cech. Przyjęta iloczynowa t-norma indukuje operatory:
+          \begin{align}
+              a \wedge b &= \top(a,b) = a \cdot b \\
+              a \vee b   &= \bot(a,b) = a + b - a \cdot b
+          \end{align}
+          W implementacji koniunkcja realizowana jest przez predykat
+          \code{t\_norma/3}, a alternatywa przez \code{s\_norma/3}.
+    \item \textbf{Wyostrzanie} -- wartość wynikowa wybierana jest metodą maksimum
+          (reguła rozmyta o najwyższym stopniu spełnienia wyznacza wartość
+          atrybutu \textit{wielkość}):
+          \begin{equation}
+              \arg\max_{x \in U} \mu(x)
+          \end{equation}
+\end{enumerate}
+
+\begin{lstlisting}[language=Prolog,caption={Reguła rozmyta i defuzyfikacja (\code{fuzzy.pl})}]
+t_norma(A, B, V) :- V is A * B.
+s_norma(A, B, V) :- V is A + B - (A * B).
+
+fuzzy_rule(srednia, Ciezar, Dlugosc, _Zycie, V) :-
+    ciezar(Ciezar, sredni, Vc),
+    dlugosc(Dlugosc, sredni, Vd),
+    t_norma(Vc, Vd, V).
+
+calculate_wielkosc(Ciezar, Dlugosc, Zycie, Wielkosc) :-
+    findall(V-W, fuzzy_rule(W, Ciezar, Dlugosc, Zycie, V), Results),
+    sort(0, @>=, Results, [MaxV-MaxW | _]),
+    ( MaxV > 0 -> Wielkosc = MaxW
+    ; Wielkosc = niestandardowa
+    ).
+\end{lstlisting}
+
+\noindent\textit{Uwaga implementacyjna:} reguły rozmyte zostały przyjęte
+w uproszczonej postaci łączącej cechy \textit{ciężar} i \textit{długość}
+(zgodnie z komentarzem w kodzie), ponieważ pełny zestaw reguł nie był
+jednoznacznie określony w specyfikacji. Jeżeli żadna reguła nie zostaje
+spełniona w stopniu większym od zera, atrybutowi nadawana jest wartość
+\textit{niestandardowa}.
+
+\subsection{Przykład liczbowy}
+Prześledźmy działanie modułu na przykładzie \textit{kozy} o parametrach:
+ciężar $= 60$~kg, długość $= 110$~cm, długość życia $= 15$~lat.
+
+\paragraph{Krok 1 -- rozmywanie.}
+Wartości liczbowe przekładane są na stopnie przynależności do zbiorów rozmytych
+(tabela~\ref{tab:fuzzy}). Niezerowe przynależności wynoszą:
+\begin{align*}
+\text{ciężar }60: \quad
+  &\mu_{\text{średni}} = \tfrac{100-60}{100-50} = 0{,}80, &
+  &\mu_{\text{ciężki}} = \tfrac{60-50}{100-50} = 0{,}20, \\
+\text{długość }110: \quad
+  &\mu_{\text{średni}} = \tfrac{120-110}{120-50} \approx 0{,}14, &
+  &\mu_{\text{duży}} = \tfrac{110-80}{200-80} = 0{,}25.
+\end{align*}
+
+\paragraph{Krok 2 -- wnioskowanie.}
+Reguły rozmyte łączą przynależności iloczynową t-normą
+($\top(a,b)=a\cdot b$). Spełnienie uzyskują dwie reguły:
+\begin{align*}
+\text{wielkość} = \text{średnia}:\quad & \mu_{\text{średni}}^{\text{ciężar}} \cdot \mu_{\text{średni}}^{\text{długość}} = 0{,}80 \cdot 0{,}14 \approx \mathbf{0{,}114}, \\
+\text{wielkość} = \text{duża}:\quad & \mu_{\text{ciężki}}^{\text{ciężar}} \cdot \mu_{\text{duży}}^{\text{długość}} = 0{,}20 \cdot 0{,}25 = 0{,}050.
+\end{align*}
+
+\paragraph{Krok 3 -- wyostrzanie.}
+Metodą maksimum wybierana jest reguła o najwyższym stopniu spełnienia:
+\[
+\arg\max\{0{,}114;\ 0{,}050\} \implies \text{wielkość} = \textbf{średnia}.
+\]
+Wynik ten został potwierdzony uruchomieniem predykatu
+\code{calculate\_wielkosc(60.0, 110.0, 15.0, W)}, który zwraca
+\code{W = srednia}.
+
+% ============================================================
+\section{Moduł wnioskowania przybliżonego}
+\label{sec:rough}
+% ============================================================
+Moduł wnioskowania przybliżonego (\code{rough.pl}) przeprowadza ostateczną
+klasyfikację zwierzęcia. Na wejściu otrzymuje atrybuty warunkowe pochodzące od
+użytkownika oraz jeden atrybut (\textit{wielkość}) wyznaczony przez moduł
+wnioskowania rozmytego. Matematyczną podstawą modułu jest teoria zbiorów
+przybliżonych.
+
+Tablica decyzyjna to para $DT=(U, A \cup \{d\})$, gdzie $U$ to zbiór obiektów
+(gatunków), $A$ to zbiór atrybutów warunkowych, a $d$ jest atrybutem decyzyjnym.
+Zbiór atrybutów warunkowych zdefiniowany jest jako:
+
+\begin{lstlisting}[language=Prolog]
+all_attributes([wielkosc, dieta, srodowisko, skrzydla, nogi, udomowione,
+                rozrod, futro, klimat, gromada, stadne, kontynent]).
+\end{lstlisting}
+
+Wartości atrybutów pobierane są jednolicie przez predykat \code{get\_attr/3},
+który dla atrybutu \textit{wielkość} sięga do wyniku modułu rozmytego, a dla
+pozostałych -- do bazy wiedzy. Przykładowy fragment tablicy decyzyjnej (dla
+czytelności ograniczony do podzbioru atrybutów warunkowych oraz sześciu
+obiektów) przedstawiono w tabeli~\ref{tab:dt}. Wartości atrybutu
+\textit{wielkość} pochodzą z rzeczywistych obliczeń modułu rozmytego.
+
+\begin{table}[h]
+\centering
+\caption{Tablica decyzyjna -- klasyfikacja zwierząt (fragment)}
+\label{tab:dt}
+\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{c l l c c l}
+\toprule
+\textbf{Obiekt} & \textbf{Wielkość} & \textbf{Dieta} & \textbf{Skrzydła?} & \textbf{Nogi} & \textbf{Gatunek ($d$)} \\
+\midrule
+1 & duża        & mięsożerne    & nie & cztery & lew \\
+2 & bardzo duża & roślinożerne  & nie & cztery & słoń \\
+3 & duża        & mięsożerne    & nie & cztery & krokodyl \\
+4 & bardzo mała & roślinożerne  & tak & sześć  & pszczoła \\
+5 & niestandard.& mięsożerne    & tak & dwa    & orzeł \\
+6 & bardzo mała & roślinożerne  & nie & cztery & mysz \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Zwróćmy uwagę, że obiekty 1 i 3 (lew, krokodyl) mają identyczne wartości
+w przedstawionym podzbiorze atrybutów -- do ich rozróżnienia konieczne są
+dodatkowe atrybuty (np. \textit{gromada}, \textit{środowisko}), co ilustruje
+rolę pełnego zbioru atrybutów warunkowych.
+
+\subsection{Relacja nierozróżnialności}
+Relację nierozróżnialności generowaną przez zbiór atrybutów $B \subseteq A$
+definiujemy następująco:
+\[
+\mathrm{IND}(B) = \{(x,y)\in U\times U : \forall_{a\in B}\; a(x)=a(y)\}
+\]
+Jest to relacja równoważności dzieląca $U$ na klasy abstrakcji obiektów
+nierozróżnialnych. Klasa abstrakcji obiektu $x$:
+\[
+[x]_B = \{y\in U : (x,y)\in \mathrm{IND}(B)\}
+\]
+W implementacji odpowiadają im predykaty \code{indiscernible/3},
+\code{equivalence\_class/4} oraz \code{all\_equivalence\_classes/3}.
+
+\subsection{Przybliżenie dolne i górne}
+Dla zbioru $X \subseteq U$ względem $B \subseteq A$ definiujemy:
+\[
+\underline{B}(X) = \bigcup\{Y\in U/\mathrm{IND}(B) : Y\subseteq X\}, \qquad
+\overline{B}(X) = \bigcup\{Y\in U/\mathrm{IND}(B) : Y\cap X \ne \emptyset\}
+\]
+Realizują je predykaty \code{lower\_approximation/3} i
+\code{upper\_approximation/3}.
+
+\subsection{Niespójność}
+Niespójność zachodzi, gdy dwa obiekty nierozróżnialne przez $A$ mają różne
+decyzje. Zaproponowany system nie dopuszcza niespójności -- są one usuwane
+\textbf{metodą jakościową}. Dla każdego obiektu wyznaczana jest dokładność
+przybliżenia dolnego:
+\[
+\gamma_B(X) = \frac{|\underline{B}(X)|}{|U|}
+\]
+a usuwany jest obiekt o najniższej dokładności. Procedurę realizuje predykat
+\code{remove\_inconsistencies/0} wraz z \code{find\_worst\_object/4}.
+
+\subsection{Atrybuty niezbędne i jądro systemu}
+Atrybut $a \in B$ nazywamy \textbf{zbędnym}, jeśli
+$\mathrm{IND}(B) = \mathrm{IND}(B\setminus\{a\})$; w przeciwnym razie jest
+\textbf{niezbędny}. Zbiór wszystkich atrybutów niezbędnych nazywamy jądrem
+$\mathrm{CORE}(B)$. W systemie jądro wyznaczane jest dwiema metodami, które
+służą do wzajemnej weryfikacji:
+\begin{itemize}[noitemsep]
+    \item jako zbiór atrybutów występujących pojedynczo we wpisach macierzy
+          nierozróżnialności (\code{core\_from\_matrix/2}),
+    \item przez bezpośrednie sprawdzenie warunku
+          $\mathrm{IND}(B)\ne\mathrm{IND}(B\setminus\{a\})$
+          (\code{core\_attributes\_verify/3}).
+\end{itemize}
+
+\subsection{Redukty}
+Redukt to minimalny zbiór atrybutów zachowujący rozróżnialność obiektów --
+musi zawierać jądro oraz mieć niepuste przecięcie z każdym niepustym wpisem
+macierzy nierozróżnialności.
+
+\subsubsection{Wyznaczanie reduktów z macierzy nierozróżnialności}
+Macierz nierozróżnialności o wymiarach $n\times n$ ($n=|U|$) ma elementy:
+\[
+M_{ij} = \{a\in A : a(x_i)\ne a(x_j)\}
+\]
+Redukty wyznaczane są metodą \textbf{zachłanną}: algorytm startuje od jądra,
+dodaje atrybuty pokrywające najwięcej niepokrytych wpisów
+(\code{greedy\_cover/4}), a następnie próbuje usunąć atrybuty zbędne
+(\code{minimize\_reduct/4}), tak by uzyskać zbiór minimalny.
+
+\subsection{Reguły minimalne}
+Przez regułę decyzyjną rozumiemy implikację postaci:
+\[
+a_1(x)=v_1 \wedge a_2(x)=v_2 \wedge \dots \wedge a_k(x)=v_k \implies dec(x)=d
+\]
+Generowanie reguł minimalnych przeprowadzono zgodnie z algorytmem
+zaproponowanym przez Z.~Pawlaka i A.~Skowrona (\textit{A rough set approach to
+decision rules generation}):
+\begin{enumerate}[noitemsep]
+    \item usunięcie niespójności z tablicy decyzyjnej $DT$ (metodą jakościową),
+    \item utworzenie macierzy nierozróżnialności,
+    \item dla każdego obiektu: utworzenie uogólnionej macierzy nierozróżnialności
+          względem decyzji, jej minimalizacja (wyznaczenie reduktu) i zapis
+          reguły decyzyjnej.
+\end{enumerate}
+
+Całość koordynuje predykat \code{generate\_reducts\_and\_rules/0}, a poszczególne
+reguły zapisywane są dynamicznie jako fakty \code{dec\_rule/3}. Klasyfikacja
+końcowa (\code{get\_decision/2}) odbywa się przez dopasowanie reguł do faktów
+podanych przez użytkownika i wybór decyzji o największej liczbie pasujących reguł.
+
+\begin{lstlisting}[language=Prolog,caption={Generowanie reguły dla obiektu (\code{rough.pl})}]
+generate_rules_for_animal(Animals, Attrs, Animal) :-
+    decision_discernibility_matrix(Animal, Animals, Attrs, Matrix),
+    ( Matrix = [] -> true
+    ; find_reduct(Matrix, Attrs, Reduct),
+      create_rule(Animal, Reduct)
+    ).
+\end{lstlisting}
+
+\subsection{Przykład: wyznaczenie reguły minimalnej}
+Prześledźmy algorytm na uproszczonej tablicy decyzyjnej (tabela~\ref{tab:dt2}),
+ograniczonej do czterech atrybutów warunkowych
+$A=\{\textit{gromada}, \textit{środowisko}, \textit{skrzydła}, \textit{dieta}\}$.
+
+\begin{table}[h]
+\centering
+\caption{Uproszczona tablica decyzyjna dla przykładu}
+\label{tab:dt2}
+\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{c l l c l l}
+\toprule
+\textbf{Obiekt} & \textbf{Gromada} & \textbf{Środowisko} & \textbf{Skrzydła?} & \textbf{Dieta} & \textbf{$d$} \\
+\midrule
+$x_1$ & ssaki & lądowe      & nie & mięsożerne   & lew \\
+$x_2$ & ptaki & powietrzne  & tak & mięsożerne   & orzeł \\
+$x_3$ & gady  & wodne       & nie & mięsożerne   & krokodyl \\
+$x_4$ & ssaki & lądowe      & nie & roślinożerne & słoń \\
+$x_5$ & płazy & wodne       & nie & mięsożerne   & żaba \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Macierz nierozróżnialności względem decyzji dla $x_1$.}
+Dla obiektu $x_1$ (lew) tworzymy wpisy $M_{1j}=\{a\in A: a(x_1)\ne a(x_j)\}$
+porównując go z obiektami o innej decyzji:
+\begin{align*}
+M_{1,2} &= \{\textit{gromada}, \textit{środowisko}, \textit{skrzydła}\}, &
+M_{1,3} &= \{\textit{gromada}, \textit{środowisko}\}, \\
+M_{1,4} &= \{\textit{dieta}\}, &
+M_{1,5} &= \{\textit{gromada}, \textit{środowisko}\}.
+\end{align*}
+
+\paragraph{Funkcja nierozróżnialności i jej minimalizacja.}
+Funkcja przyjmuje postać koniunkcji alternatyw (CNF):
+\[
+f(x_1) = (\textit{gr}\vee\textit{śr}\vee\textit{sk}) \wedge (\textit{gr}\vee\textit{śr}) \wedge (\textit{dieta}) \wedge (\textit{gr}\vee\textit{śr}).
+\]
+Atrybut \textit{dieta} występuje samodzielnie -- należy do jądra i musi znaleźć
+się w redukcie. Pozostałe klauzule pokrywa pojedynczy atrybut \textit{gromada}
+(lub równoważnie \textit{środowisko}). Algorytm zachłanny
+(\code{find\_reduct/3}) wybiera zatem redukt $\{\textit{dieta}, \textit{gromada}\}$.
+
+\paragraph{Zapis reguły.}
+Na podstawie reduktu i wartości atrybutów obiektu $x_1$ powstaje reguła:
+\[
+\textit{gromada}=\text{ssaki} \;\wedge\; \textit{dieta}=\text{mięsożerne}
+\implies \text{lew}.
+\]
+W pełnym systemie (12 atrybutów warunkowych) dla lwa generowana jest analogiczna,
+lecz dłuższa reguła oparta na innych atrybutach rozróżniających:
+\code{dieta=miesozerne $\wedge$ kontynent=afryka $\wedge$ stadne=tak => lew}.
+
+% ============================================================
+\section{Architektura Systemu -- Separacja Warstw}
+\label{sec:arch}
+% ============================================================
+Projekt przestrzega zasady ścisłego rozdzielenia warstw, co jest kryterium
+projektowym o szczególnym znaczeniu dla systemów z bazą wiedzy.
+
+\subsection{Komponenty systemu}
+System podzielony jest na cztery główne komponenty, każdy w osobnym module
+Prologa:
+\begin{enumerate}
+    \item \textbf{Baza danych i wiedzy} (\code{kb.pl}) -- zawiera wyłącznie fakty
+          i reguły dziedzinowe (zoologia). Nie zawiera logiki sterującej ani
+          elementów interfejsu.
+    \item \textbf{Mechanizm wnioskowania rozmytego} (\code{fuzzy.pl}) --
+          implementuje czystą logikę rozmytą: funkcje przynależności, operatory
+          t- i s-normy oraz wyznaczanie atrybutu \textit{wielkość}. Nie zna
+          interfejsu użytkownika.
+    \item \textbf{Moduł znajdowania reguł minimalnych} (\code{rough.pl}) --
+          oddzielny komponent umożliwiający wydrukowanie atrybutów niezbędnych
+          i reguł minimalnych na potrzeby analizy bazy wiedzy
+          (\code{print\_indispensable/0}, \code{find\_minimal\_rules/0}).
+    \item \textbf{Interfejs użytkownika} (\code{ui.pl}) -- odpowiada wyłącznie
+          za komunikację z użytkownikiem i formatowanie wyników. Nie zawiera
+          wiedzy dziedzinowej.
+\end{enumerate}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    node distance=0.8cm and 1.2cm,
+    box/.style={draw, rounded corners, minimum width=3.2cm, minimum height=1cm,
+                align=center, fill=blue!5},
+    arr/.style={-{Latex[length=2mm]}, thick}
+]
+\node[box] (ui) {Interfejs użytkownika\\\code{ui.pl}};
+\node[box, below=of ui] (rough) {Moduł rough sets\\\code{rough.pl}};
+\node[box, left=of rough] (fuzzy) {Moduł rozmyty\\\code{fuzzy.pl}};
+\node[box, below=of rough] (kb) {Baza wiedzy\\\code{kb.pl}};
+\draw[arr] (ui) -- (rough);
+\draw[arr] (rough) -- (fuzzy);
+\draw[arr] (rough) -- (kb);
+\draw[arr] (ui.west) to[bend right=30] (fuzzy.north);
+\end{tikzpicture}
+\caption{Zależności między modułami systemu}
+\end{figure}
+
+\subsection{Wymagania dotyczące separacji}
+Separacja warstw oznacza w szczególności:
+\begin{itemize}[noitemsep]
+    \item dane przedmiotowe nie pojawiają się w warstwie interfejsu,
+    \item baza wiedzy jest oddzielona zarówno od interfejsu, jak i od logiki
+          sterowania,
+    \item konkluzje (reguły decyzyjne) konstruowane są dynamicznie w trakcie
+          procesu wnioskowania (\code{dec\_rule/3} jako fakty dynamiczne) --
+          nie są reprezentowane jako statyczne fakty w bazie wiedzy.
+\end{itemize}
+
+% ============================================================
+\section{Instalacja i uruchomienie}
+% ============================================================
+Do uruchomienia systemu wymagany jest interpreter \textbf{SWI-Prolog}
+(\url{https://www.swi-prolog.org}). System startuje poleceniem wydanym
+w katalogu głównym projektu:
+\begin{lstlisting}[language=bash]
+swipl main.pl
+\end{lstlisting}
+
+Po starcie wyświetlane jest menu z dwiema opcjami:
+\begin{enumerate}[noitemsep]
+    \item \textbf{Uruchom system ekspertowy} -- interaktywna identyfikacja
+          gatunku (dialog z dynamiczną selekcją pytań),
+    \item \textbf{Analiza bazy wiedzy} -- wypisanie atrybutów niezbędnych
+          (jądra) oraz wygenerowanych reguł minimalnych.
+\end{enumerate}
+
+\subsection{Rozszerzanie bazy wiedzy}
+Baza wiedzy generowana jest automatycznie z pliku
+\code{zwierzeta\_atrybuty.csv}. Aby dodać nowy gatunek, wystarczy dopisać wiersz
+do pliku CSV (kolumny: \textit{Zwierze, dieta, srodowisko, skrzydla, nogi,
+udomowione, rozrod, futro, klimat, gromada, stadne, kontynent, ciezar, dlugosc,
+zycie}) i ponownie wygenerować bazę:
+\begin{lstlisting}[language=bash]
+python gen_kb.py    # tworzy na nowo src/kb.pl
+\end{lstlisting}
+Atrybuty ciągłe (\textit{ciezar}, \textit{dlugosc}, \textit{zycie}) podaje się
+jako liczby; pozostałe -- jako wartości tekstowe zgodne z tabelami~\ref{tab:fuzzy}
+i~\ref{tab:discrete}.
+
+\subsection{Analiza bazy wiedzy}
+Wybór opcji~2 uruchamia moduł analizy. Dla aktualnej bazy (100 gatunków)
+moduł zwraca jądro systemu oraz zbiór reguł minimalnych:
+\begin{lstlisting}
+Atrybuty niezbedne (Core) w calym systemie:
+  [dieta, futro, gromada, kontynent, srodowisko, stadne, udomowione, wielkosc]
+
+Reguly minimalne wygenerowane pomyslnie.
+Liczba regul: 91
+Przykladowe reguly:
+  dieta=miesozerne ^ kontynent=afryka ^ stadne=tak => lew
+  kontynent=azja ^ wielkosc=duza => tygrys
+  klimat=umiarkowany ^ stadne=nie ^ wielkosc=duza => niedzwiedz
+\end{lstlisting}
+Jądro liczy 8 atrybutów -- są to cechy, których usunięcie naruszyłoby
+rozróżnialność gatunków. Atrybuty \textit{skrzydła}, \textit{nogi},
+\textit{rozród} i \textit{klimat} okazały się w tym zbiorze zbędne (redundantne),
+co nie znaczy, że nie pojawiają się w pojedynczych regułach minimalnych.
+
+% ============================================================
+\section{Przykładowa sesja identyfikacji}
+% ============================================================
+Poniżej przedstawiono rzeczywisty zapis sesji identyfikacji \textit{lwa}.
+System inicjalizuje bazę, generuje reguły, a następnie zadaje pytania
+o atrybutach o najwyższej mocy dyskryminacyjnej, zawężając zbiór hipotez po
+każdej odpowiedzi. Odpowiedzi użytkownika oznaczono symbolem ,,\code{>}''.
+
+\begin{lstlisting}
+Wybierz opcje:
+1. Uruchom system ekspertowy (identyfikacja zwierzecia)
+2. Analiza bazy wiedzy (reguly minimalne i atrybuty niezbedne)
+Twoj wybor (1/2):                                            > 1
+-----------------------------------------
+System Ekspertowy - Identyfikacja Zwierzat
+-----------------------------------------
+Inicjalizacja bazy wiedzy i wnioskowanie rough sets...
+Gotowe. Rozpoczynamy dialog.
+Pytanie: Czy to zwierze jest udomowione?
+Mozliwe opcje: [nie,tak]                                     > nie
+Pytanie: Czy to zwierze posiada skrzydla?
+Mozliwe opcje: [nie,tak]                                     > nie
+Pytanie: W jakim srodowisku zyje to zwierze?
+Mozliwe opcje: [ladowe,wodne]                                > ladowe
+Pytanie: Ile nog/odnozy ma to zwierze?
+Mozliwe opcje: [cztery,brak,dwa,osiem]                       > cztery
+Pytanie: Jaka jest strategia rozrodcza zwierzecia?
+Mozliwe opcje: [zyworodne,jajorodne]                         > zyworodne
+Pytanie: Czy to zwierze posiada futro?
+Mozliwe opcje: [tak,nie]                                     > tak
+Pytanie: Czy to zwierze jest stadne?
+Mozliwe opcje: [tak,nie]                                     > tak
+Pytanie: W jakim klimacie najczesciej zyje to zwierze?
+Mozliwe opcje: [cieply,umiarkowany]                          > cieply
+Pytanie: Z jakiego kontynentu pochodzi to zwierze?
+Mozliwe opcje: [afryka,australia]                            > afryka
+Pytanie: Jaka jest glowna dieta zwierzecia?
+Mozliwe opcje: [miesozerne,roslinozerne]                     > miesozerne
+-----------------------------------------
+Zidentyfikowane zwierze to: lew
+Decyzja z modulu Rough Set: lew
+-----------------------------------------
+\end{lstlisting}
+
+W tej sesji do jednoznacznej identyfikacji wystarczyło 10 pytań (na 12 możliwych
+atrybutów). Gdyby w grę wchodziło rozróżnienie po wielkości, system poprosiłby
+dodatkowo o liczbowy ciężar, długość i długość życia, po czym sam wyznaczyłby
+kategorię wielkości metodą wnioskowania rozmytego (rozdział~4).
+
+% ============================================================
+\section{Testy i Weryfikacja}
+% ============================================================
+Poprawność systemu weryfikowano na kilku poziomach:
+\begin{itemize}[noitemsep]
+    \item \textbf{Moduł rozmyty} -- wartości funkcji przynależności oraz wynik
+          atrybutu \textit{wielkość} sprawdzano dla wybranych gatunków przez
+          bezpośrednie wywołanie \code{calculate\_wielkosc/4} (np. koza
+          $\rightarrow$ \textit{średnia}, lew $\rightarrow$ \textit{duża}, słoń
+          $\rightarrow$ \textit{bardzo duża}).
+    \item \textbf{Spójność bazy wiedzy} -- moduł analizy wykrywa i usuwa
+          niespójności metodą jakościową; po tym etapie z~91 wygenerowanych
+          reguł żadna nie prowadzi do sprzecznej decyzji.
+    \item \textbf{Jądro systemu} -- wyznaczane jest dwiema niezależnymi metodami
+          (z~macierzy nierozróżnialności oraz przez warunek
+          $\mathrm{IND}(B)\ne\mathrm{IND}(B\setminus\{a\})$), które dają zgodny
+          wynik, co potwierdza poprawność implementacji.
+    \item \textbf{Dialog} -- przeprowadzono sesje identyfikacyjne dla gatunków
+          z~różnych gromad, weryfikując, że system zbiega do jednego gatunku oraz
+          że decyzja modułu rough set pokrywa się z~wynikiem dialogu.
+\end{itemize}
+
+% ============================================================
+\section{Ograniczenia i Kierunki Rozwoju}
+% ============================================================
+Zrealizowany system ma kilka znanych ograniczeń, które wyznaczają naturalne
+kierunki dalszego rozwoju:
+\begin{itemize}[noitemsep]
+    \item \textbf{Uproszczone reguły rozmyte} -- atrybut \textit{wielkość}
+          wyznaczany jest na podstawie sparowanych kategorii ciężaru i długości;
+          dla nietypowych proporcji (np. długi, lecz lekki wąż) zwracana jest
+          wartość \textit{niestandardowa}. Rozszerzenie zbioru reguł rozmytych
+          poprawiłoby pokrycie takich przypadków.
+    \item \textbf{Brak obsługi błędnych odpowiedzi} -- podanie wartości spoza
+          listy opcji zawęża zbiór hipotez do pustego; warto dodać walidację
+          i możliwość cofnięcia odpowiedzi.
+    \item \textbf{Wagi reguł} -- obecnie wszystkie reguły mają wagę~1
+          (\code{dec\_rule/3}); wprowadzenie wag opartych na pokryciu lub
+          pewności umożliwiłoby ranking konkurencyjnych hipotez.
+    \item \textbf{Interfejs} -- system działa w trybie tekstowym; możliwe jest
+          opracowanie graficznego interfejsu użytkownika.
+\end{itemize}
+
+% ============================================================
+\section{Harmonogram Realizacji}
+% ============================================================
+Prace nad projektem prowadzone były w cyklu 15-tygodniowym. Faktyczny przebieg
+realizacji poszczególnych etapów przedstawia diagram Gantta
+(rysunek~\ref{fig:gantt}).
+
+\begin{figure}[h]
+\centering
+\begin{ganttchart}[
+    hgrid, vgrid,
+    x unit=0.52cm,
+    y unit chart=0.6cm,
+    y unit title=0.7cm,
+    title height=1,
+    bar height=0.6,
+    bar/.style={fill=blue!30, draw=blue!60},
+    bar label font=\small,
+    title label font=\small,
+    milestone/.style={fill=black, draw=black},
+    milestone label font=\small\itshape
+]{1}{15}
+\gantttitle{Tydzień}{15} \\
+\gantttitlelist{1,...,15}{1} \\
+\ganttbar{Opis projektu}{1}{3} \\
+\ganttbar{Projekt bazy wiedzy}{3}{5} \\
+\ganttbar{Silnik wnioskowania}{4}{6} \\
+\ganttbar{Logika rozmyta}{6}{8} \\
+\ganttbar{Moduł analizy minimalnej}{7}{10} \\
+\ganttbar{Interfejs i integracja}{10}{12} \\
+\ganttbar{Testy i dokumentacja}{12}{14}
+\end{ganttchart}
+\caption{Diagram Gantta -- harmonogram realizacji projektu}
+\label{fig:gantt}
+\end{figure}
+
+% ============================================================
+\section{Podział Obowiązków}
+% ============================================================
+Realizacja projektu została podzielona pomiędzy członków zespołu zgodnie
+z tabelą~\ref{tab:podzial}. Każdy z autorów odpowiadał za wydzielony moduł
+systemu, przy wspólnej pracy nad integracją i dokumentacją.
+
+\begin{table}[h]
+\centering
+\caption{Podział obowiązków w zespole projektowym}
+\label{tab:podzial}
+\begin{tabularx}{\linewidth}{l X}
+\toprule
+\textbf{Osoba} & \textbf{Zakres odpowiedzialności} \\
+\midrule
+Krzysztof Gryboś    & Baza wiedzy (\code{kb.pl}), zbiór danych \code{zwierzeta\_atrybuty.csv} oraz skrypt generujący \code{gen\_kb.py}. \\
+Michał Piechota     & Moduł wnioskowania rozmytego (\code{fuzzy.pl}) -- funkcje przynależności, operatory t-/s-normy, wyznaczanie atrybutu \textit{wielkość}. \\
+Sebastian Rydz      & Moduł wnioskowania przybliżonego (\code{rough.pl}) -- relacja nierozróżnialności, redukty, reguły minimalne, klasyfikacja. \\
+Hubert Sobociński   & Interfejs użytkownika (\code{ui.pl}), dynamiczna selekcja pytań, integracja modułów i dokumentacja. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ============================================================
+\section{Podsumowanie}
+% ============================================================
+Zrealizowany system ekspertowy do identyfikacji gatunków zwierząt stanowi
+praktyczną implementację koncepcji wnioskowania regułowego wzbogaconego
+o mechanizmy logiki rozmytej i teorii zbiorów przybliżonych. Kluczowymi
+elementami wyróżniającymi system są:
+\begin{itemize}[noitemsep]
+    \item \textbf{Wnioskowanie w warunkach niepewności} -- dzięki funkcjom
+          przynależności system radzi sobie z rozmytymi parametrami i płynnymi
+          granicami między kategoriami,
+    \item \textbf{Dynamiczny, kontekstowy dialog} -- liczba pytań jest
+          minimalizowana przez wybór atrybutów o najniższej entropii,
+    \item \textbf{Moduł analizy minimalnej} -- narzędzie do weryfikacji
+          i optymalizacji bazy wiedzy, wykrywające niespójności, atrybuty
+          niezbędne i redukty,
+    \item \textbf{Czysta separacja warstw} -- architektura gwarantująca
+          niezależność bazy wiedzy, silnika wnioskowania, modułu analizy
+          i interfejsu.
+\end{itemize}
+
+Zastosowanie języka Prolog jako platformy implementacyjnej pozwoliło w naturalny
+sposób wyrazić reguły produkcji i mechanizm wnioskowania wstecznego, a rozszerzenie
+o operatory rozmyte i zbiory przybliżone umożliwiło obsługę rzeczywistych,
+niedoskonałych danych wejściowych.
+
+% ============================================================
+\begin{thebibliography}{9}
+% ============================================================
+\bibitem{pawlak1982}
+Z.~Pawlak,
+\textit{Rough sets},
+International Journal of Computer and Information Sciences, 11(5):341--356, 1982.
+
+\bibitem{pawlakskowron}
+Z.~Pawlak, A.~Skowron,
+\textit{Rough sets and Boolean reasoning},
+Information Sciences, 177(1):41--73, 2007.
+
+\bibitem{skowronrauszer}
+A.~Skowron, C.~Rauszer,
+\textit{The discernibility matrices and functions in information systems},
+w: Intelligent Decision Support, Springer, s.~331--362, 1992.
+
+\bibitem{zadeh1965}
+L.~A.~Zadeh,
+\textit{Fuzzy sets},
+Information and Control, 8(3):338--353, 1965.
+
+\bibitem{swipl}
+J.~Wielemaker i in.,
+\textit{SWI-Prolog Reference Manual},
+\url{https://www.swi-prolog.org}.
+\end{thebibliography}
+
+\end{document}
