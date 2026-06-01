@@ -78,6 +78,10 @@
 
 \newcommand{\code}[1]{\texttt{#1}}
 
+% Pozwala TeX-owi przerzucic zbyt dlugi token (np. nazwe predykatu) do nowej
+% linii zamiast wypychac go poza prawy margines.
+\emergencystretch=3em
+
 \begin{document}
 
 % ============================================================
@@ -544,7 +548,8 @@ nierozróżnialnych. Klasa abstrakcji obiektu $x$:
 [x]_B = \{y\in U : (x,y)\in \mathrm{IND}(B)\}
 \]
 W implementacji odpowiadają im predykaty \code{indiscernible/3},
-\code{equivalence\_class/4} oraz \code{all\_equivalence\_classes/3}.
+\code{equivalence\_class/4} oraz
+\code{all\_\allowbreak equivalence\_\allowbreak classes/3}.
 
 \subsection{Przybliżenie dolne i górne}
 Dla zbioru $X \subseteq U$ względem $B \subseteq A$ definiujemy:
